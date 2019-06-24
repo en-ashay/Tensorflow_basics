@@ -43,6 +43,7 @@ y=x+3
 with tf.Session() as sess:
     print(sess.run(y,feed_dict={x:[[2,3,4],[4,5,56]]}))
 
+# Tensorflow version    
 import tensorflow as tf
 tf.VERSION
 
