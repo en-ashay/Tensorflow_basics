@@ -35,8 +35,7 @@ x_test = np.reshape(x_test, [-1, image_size, image_size, 1])
 x_train = x_train.astype('float32') / 255
 x_test = x_test.astype('float32') / 255
 
-# Generate corrupted MNIST images by adding noise with normal dist
-# centered at 0.5 and std=0.5
+
 noise = np.random.normal(loc=0.5, scale=0.5, size=x_train.shape)
 x_train_noisy = x_train + noise
 noise = np.random.normal(loc=0.5, scale=0.5, size=x_test.shape)
@@ -54,14 +53,9 @@ latent_dim = 16
 layer_filters = [32, 64]
 
 # Build the Autoencoder Model
-# First build the Encoder Model
 inputs = Input(shape=input_shape, name='encoder_input')
 x = inputs
-# Stack of Conv2D blocks
-# Notes:
-# 1) Use Batch Normalization before ReLU on deep networks
-# 2) Use MaxPooling2D as alternative to strides>1
-# - faster but not as good as strides>1
+
 for filters in layer_filters:
     x = Conv2D(filters=filters,
                kernel_size=kernel_size,
@@ -69,27 +63,21 @@ for filters in layer_filters:
                activation='relu',
                padding='same')(x)
 
-# Shape info needed to build Decoder Model
 shape = K.int_shape(x)
 
 # Generate the latent vector
 x = Flatten()(x)
 latent = Dense(latent_dim, name='latent_vector')(x)
 
-# Instantiate Encoder Model
+
 encoder = Model(inputs, latent, name='encoder')
 encoder.summary()
 
-# Build the Decoder Model
 latent_inputs = Input(shape=(latent_dim,), name='decoder_input')
 x = Dense(shape[1] * shape[2] * shape[3])(latent_inputs)
 x = Reshape((shape[1], shape[2], shape[3]))(x)
 
-# Stack of Transposed Conv2D blocks
-# Notes:
-# 1) Use Batch Normalization before ReLU on deep networks
-# 2) Use UpSampling2D as alternative to strides>1
-# - faster but not as good as strides>1
+
 for filters in layer_filters[::-1]:
     x = Conv2DTranspose(filters=filters,
                         kernel_size=kernel_size,
@@ -103,25 +91,23 @@ x = Conv2DTranspose(filters=1,
 
 outputs = Activation('sigmoid', name='decoder_output')(x)
 
-# Instantiate Decoder Model
+
 decoder = Model(latent_inputs, outputs, name='decoder')
 decoder.summary()
 
-# Autoencoder = Encoder + Decoder
-# Instantiate Autoencoder Model
+
 autoencoder = Model(inputs, decoder(encoder(inputs)), name='autoencoder')
 autoencoder.summary()
 
 autoencoder.compile(loss='mse', optimizer='adam')
 
-# Train the autoencoder
+
 autoencoder.fit(x_train_noisy,
                 x_train,
                 validation_data=(x_test_noisy, x_test),
                 epochs=30,
                 batch_size=batch_size)
 
-# Predict the Autoencoder output from corrupted test images
 x_decoded = autoencoder.predict(x_test_noisy)
 
 rows, cols = 10, 30
@@ -152,11 +138,9 @@ os.listdir()
 os.makedirs('./model', exist_ok=True)
 autoencoder.save('./model/keras_model.h5')
 
-# In case you ran into the "incompatible with expected resource" issue with a model containing BatchNormization layers such as DenseNet,
-#  make sure to set the learning phase to 0 before loading the Keras model in a new session.
 
 from keras import backend as K
-K.set_learning_phase(0)
+K.set_learning_phase(0)         # Important step as it can cause problem in some networks as Densenets and while using Batch_Normalization
 
 from keras.models import load_model
 model = load_model('./model/keras_model.h5')
@@ -165,32 +149,14 @@ print(model.output)
 
 print(model.input)
 
-"""As you can see, our simple model has only single input and output, your model might have multiple inputs/outputs.
-
-We keep track of their names since we are going to locate them by name in the converted TensorFlow graph during inference.
-
-The first step is to get the computation graph of TensorFlow backend which represents the Keras model, where the forward pass and training related operations are included.
-
-Then the graph will be converted to a GraphDef protocol buffer, after that it will be pruned so subgraphs that are not necessary to compute the requested outputs such as the training operations are removed. This step if refer to as freezing the graph."""
 
 import tensorflow as tf
 import keras.backend as K
 
-def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
-    """
-    Freezes the state of a session into a pruned computation graph.
 
-    Creates a new computation graph where variable nodes are replaced by
-    constants taking their current value in the session. The new graph will be
-    pruned so subgraphs that are not necessary to compute the requested
-    outputs are removed.
-    @param session The TensorFlow session to be frozen.
-    @param keep_var_names A list of variable names that should not be frozen,
-                          or None to freeze all the variables in the graph.
-    @param output_names Names of the relevant graph outputs.
-    @param clear_devices Remove the device directives from the graph for better portability.
-    @return The frozen graph definition.
-    """
+# Freeze the Computation graph
+def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
+    
     from tensorflow.python.framework.graph_util import convert_variables_to_constants
     graph = session.graph
     with graph.as_default():
